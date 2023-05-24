@@ -61,7 +61,6 @@ void setup() {
   pinMode(STBY, OUTPUT);
   pinMode(CTL1, OUTPUT);
   pinMode(CTL2, OUTPUT);
-  pinMode(2, OUTPUT);
 
   // configure LED PWM functionalitites
   ledcSetup(pwmChannel, freq, resolution);
