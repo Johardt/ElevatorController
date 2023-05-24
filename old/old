@@ -1,0 +1,26 @@
+ledcWrite(ledChannel, 0);   // set duty cycle to 0% (=0*256/4)
+  delay(500); // wait 500ms
+  ledcWrite(ledChannel, 64);  // set duty cycle to 25% (=1*256/4)
+  delay(500); // wait 500ms
+  ledcWrite(ledChannel, 128); // set duty cycle to 50% (=2*256/4)
+  delay(500); // wait 500ms
+  ledcWrite(ledChannel, 192); // set duty cycle to 75% (=3*256/4)
+  delay(500); // wait 500ms
+  ledcWrite(ledChannel, 255); // set duty cycle to 100% (=4*256/4)
+  delay(500);
+
+  delay(1000);
+  int power = 0;
+  for (int i = 0; i < 192; i++) {
+    power += 1;
+    ledcWrite(ledChannel, power);
+    delay(10);
+  }
+  delay(2160);
+  for (int i = 0; i < 192; i++) {
+    power -= 1;
+    ledcWrite(ledChannel, power);
+    delay(5);
+  }
+  ledcWrite(ledChannel, 0);
+  delay(1000);
