@@ -17,10 +17,12 @@ pthread_t thread;
 
 /**
  * s-curve function. given an x value, returns y of the [Logistic function](https://en.wikipedia.org/wiki/Logistic_function)
-*/
+ */
 double scurve(int x, int supremum, double k, int x0);
 
-// Accelerates from 0% to 75% in 2 seconds using the logistic curve function
+/**
+ * Accelerates from 0% to 75% in 2 seconds using the logistic curve function
+ */ 
 void accelerate() {
   int power = 0;
   for (int i = 0; i < 200; i++) {
@@ -30,7 +32,9 @@ void accelerate() {
   }
 }
 
-// Decelerates from 75% to 0% in 2 seconds using the logistic curve function
+/**
+ * Decelerates from 75% to 0% in 2 seconds using the logistic curve function
+ */
 void decelerate() {
   int power = 192;
   for (int i = 0; i < 200; i++) {
@@ -40,11 +44,14 @@ void decelerate() {
   }
 }
 
-// Thread function to move. Accelerates to 75%, stays at that for the specified time, and decelerates again.
-void* move(void *time) {
+/**
+ * Thread function to move. Accelerates to 75%, stays at that for specified amount of time, and decelerates again.
+ */
+void* move(void *args) {
   accelerate();
   //delay(*(int*) time);
   decelerate();
+  return NULL;
 }
 
 void setup() {
@@ -60,13 +67,15 @@ void setup() {
   ledcSetup(pwmChannel, freq, resolution);
   // attach the channel to the GPIO to be controlled
   ledcAttachPin(PWM, pwmChannel);
+
+  // Initially, set all pins to 0 power
+  ledcWrite(pwmChannel, 0);
   digitalWrite(STBY, LOW);
   digitalWrite(CTL1, HIGH);
   digitalWrite(CTL2, LOW);
 }
 
 void loop() {
-  
   Serial.println("Beginning of loop!");
   digitalWrite(STBY, HIGH);
   delay(1000);
