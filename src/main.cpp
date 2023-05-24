@@ -16,6 +16,7 @@ const int pwmChannel = 0;
 const int resolution = 8;
 
 pthread_t thread;
+instruction next = {.direction = CLOCKWISE, .time = 1.0};
 
 /**
  * Accelerates from 0% to 75% in 2 seconds using the logistic curve function
@@ -35,9 +36,13 @@ void setDirection(int direction);
  * Thread function to move. Accelerates to 75%, stays at that for specified amount of time, and decelerates again.
  */
 void* move(void *args) {
+  setDirection(next.direction);
+  digitalWrite(STBY, HIGH);
   accelerate();
-  //delay(*(int*) time);
+  sleep(next.time);
   decelerate();
+  digitalWrite(STBY, LOW);
+  setDirection(0);
   return NULL;
 }
 
@@ -67,26 +72,20 @@ void loop() {
 
 void sequence() {
   // Put motor controller in standby
-  setDirection(CLOCKWISE);
-  digitalWrite(STBY, HIGH);
+  next = {.direction = CLOCKWISE, .time = 1.0};
   pthread_create(&thread, NULL, move, NULL);
   Serial.println("Elevator moving up");
 
   pthread_join(thread, NULL);
   Serial.println("Elevator reached first floor, waiting...");
-  setDirection(0);
-  digitalWrite(STBY, LOW);
   sleep(2);
 
-  setDirection(COUNTERCLOCKWISE);
-  digitalWrite(STBY, HIGH);
+  next = {.direction = COUNTERCLOCKWISE, .time = 1.0};
   pthread_create(&thread, NULL, move, NULL);
   Serial.println("Elevator moving down");
 
   pthread_join(thread, NULL);
   Serial.println("Elevator reached ground floor, waiting...");
-  setDirection(0);
-  digitalWrite(STBY, LOW);
   sleep(2);
 }
 
