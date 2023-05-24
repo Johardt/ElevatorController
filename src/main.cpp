@@ -54,6 +54,14 @@ void* move(void *args) {
   return NULL;
 }
 
+void sequence();
+
+/*
+ * CW and CCW
+ */
+void setCW();
+void setCCW();
+
 void setup() {
   // put your setup code here, to run once:
   Serial.begin(9600);
@@ -70,34 +78,41 @@ void setup() {
   // Initially, set all pins to 0 power
   ledcWrite(pwmChannel, 0);
   digitalWrite(STBY, LOW);
-  digitalWrite(CTL1, HIGH);
+  digitalWrite(CTL1, LOW);
   digitalWrite(CTL2, LOW);
 }
 
 void loop() {
-  Serial.println("Beginning of loop!");
-  digitalWrite(STBY, HIGH);
-  delay(1000);
-  digitalWrite(CTL1, LOW);
-  digitalWrite(CTL2, HIGH);
-  Serial.println("Creating first thread!");
-  pthread_create(&thread, NULL, move, NULL);
-  Serial.println("Created first thread!");
-  digitalWrite(STBY, LOW);
-  Serial.println("Joining first thread!");
-  pthread_join(thread, NULL);
-  Serial.println("Joined first thread!");
-  digitalWrite(STBY, HIGH);
-  Serial.println("We will probably not read this.");
-  delay(1000);
-  digitalWrite(CTL1, HIGH);
-  digitalWrite(CTL2, LOW);
-  pthread_create(&thread, NULL, move, NULL);
-  digitalWrite(STBY, LOW);
-  pthread_join(thread, NULL);
-  Serial.println("Reached end of loop!");
+  Serial.println("Starting sequence");
+  sequence();
 }
 
 double scurve(int x, int supremum, double k, int x0) {
   return supremum / (1 + pow(e, k * (x - x0)));
+}
+
+void sequence() {
+  // Put motor controller in standby
+  digitalWrite(CTL1, HIGH);
+  digitalWrite(CTL2, LOW);
+  digitalWrite(STBY, HIGH);
+  pthread_create(&thread, NULL, move, NULL);
+  Serial.println("Elevator moving up");
+
+  pthread_join(thread, NULL);
+  Serial.println("Elevator reached first floor, waiting...");
+  digitalWrite(CTL1, LOW);
+  digitalWrite(STBY, LOW);
+  sleep(2);
+
+  digitalWrite(CTL2, HIGH);
+  digitalWrite(STBY, HIGH);
+  pthread_create(&thread, NULL, move, NULL);
+  Serial.println("Elevator moving down");
+
+  pthread_join(thread, NULL);
+  Serial.println("Elevator reached ground floor, waiting...");
+  digitalWrite(CTL2, LOW);
+  digitalWrite(STBY, LOW);
+  sleep(2);
 }
