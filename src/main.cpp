@@ -8,14 +8,15 @@
 #define CTL2 13
 #define PWM 21
 
-#define CLOCKWISE 2         // 10 in binary, so CTL1 1, CTL2 0
-#define COUNTERCLOCKWISE 1  // 01 in binary, so CTL1 0, CTL2 1
-
 const int freq = 500;
 const int pwmChannel = 0;
 const int resolution = 8;
 
-pthread_t thread;
+pthread_t move_thread;
+
+/*
+ * Move thread will read this instruction to know what to do next. It is being written by the main thread.
+ */
 instruction next = {.direction = CLOCKWISE, .time = 1.0};
 
 /**
@@ -28,9 +29,10 @@ void accelerate();
  */
 void decelerate();
 
-void sequence();
-
-void setDirection(int direction);
+/*
+ * Sets the direction pins to clockwise or counterclockwise. Use with 
+ */
+void setDirection(direction dir);
 
 /**
  * Thread function to move. Accelerates to 75%, stays at that for specified amount of time, and decelerates again.
@@ -42,10 +44,13 @@ void* move(void *args) {
   sleep(next.time);
   decelerate();
   digitalWrite(STBY, LOW);
-  setDirection(0);
+  setDirection(NO_DIRECTION);
   return NULL;
 }
 
+/*
+ * Standard Arduino function which contains the setup code.
+ */
 void setup() {
   // put your setup code here, to run once:
   Serial.begin(9600);
@@ -62,36 +67,37 @@ void setup() {
   // Initially, set all pins to 0 power
   ledcWrite(pwmChannel, 0);
   digitalWrite(STBY, LOW);
-  setDirection(0);
+  setDirection(NO_DIRECTION);
 }
 
+/*
+ * Standard Arduino function which contains the logic of the program. It just continually loops whatever is inside, as the name suggests.
+ */
 void loop() {
-  Serial.println("Starting sequence");
-  sequence();
-}
-
-void sequence() {
-  // Put motor controller in standby
   next = {.direction = CLOCKWISE, .time = 1.0};
-  pthread_create(&thread, NULL, move, NULL);
+  pthread_create(&move_thread, NULL, move, NULL);
   Serial.println("Elevator moving up");
 
-  pthread_join(thread, NULL);
+  pthread_join(move_thread, NULL);
   Serial.println("Elevator reached first floor, waiting...");
   sleep(2);
 
   next = {.direction = COUNTERCLOCKWISE, .time = 1.0};
-  pthread_create(&thread, NULL, move, NULL);
+  pthread_create(&move_thread, NULL, move, NULL);
   Serial.println("Elevator moving down");
 
-  pthread_join(thread, NULL);
+  pthread_join(move_thread, NULL);
   Serial.println("Elevator reached ground floor, waiting...");
   sleep(2);
 }
 
-void setDirection(int direction) {
-  digitalWrite(CTL1, (direction >> 1) & 1);
-  digitalWrite(CTL2, direction & 1);
+double scurve(int x, int supremum, double k, int x0) {
+  return supremum / (1 + pow(e, k * (x - x0)));
+}
+
+void setDirection(direction dir) {
+  digitalWrite(CTL1, (dir >> 1) & 1);
+  digitalWrite(CTL2, dir & 1);
 }
 
 void accelerate() {
