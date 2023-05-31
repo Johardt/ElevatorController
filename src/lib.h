@@ -4,12 +4,13 @@ typedef enum {
     CLOCKWISE
 } direction;
 
-typedef struct INSTRUCTION {
-    direction direction;
+typedef struct INSTR {
+    direction dir;
     float time;
 } instruction;
 
-const double e = 2.718281828459;
+typedef struct {
+} priority_queue;
 
 /**
  * s-curve function. given an x value, returns y of the [Logistic function](https://en.wikipedia.org/wiki/Logistic_function)
