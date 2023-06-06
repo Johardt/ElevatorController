@@ -7,7 +7,7 @@
 #include <unistd.h>
 #include "lib.h"
 #include "queue.h"
-#include "constants.h"
+#include "config.h"
 
 // Pin definitions. The reference shows which GPIO have which number.
 // The colors refer to the color of the cable attached to the pin.

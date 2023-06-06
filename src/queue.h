@@ -1,4 +1,4 @@
-#include "constants.h"
+#include "config.h"
 
 typedef enum {
     ASCENDING = -1,
