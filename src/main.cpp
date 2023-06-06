@@ -7,7 +7,7 @@
 #include <unistd.h>
 #include "lib.h"
 #include "queue.h"
-#include "common.h"
+#include "constants.h"
 
 // Pin definitions. The reference shows which GPIO have which number.
 // The colors refer to the color of the cable attached to the pin.
@@ -23,7 +23,7 @@ const int resolution = 8;
 
 pthread_t move_thread;
 pthread_t demo_thread;
-int current_floor = 0; // Will only be written by move_thread, so doesn't need to be mutex'd.
+int current_floor = 0; // Will only be written by main loop, so doesn't need to be mutex'd.
 
 // New requests will be put into either upQueue or downQueue, depending on the current location of the elevator.
 // The elevator will satisfy all requests of one queue until it is empty, then empty the next one. If both are empty,
@@ -31,18 +31,6 @@ int current_floor = 0; // Will only be written by move_thread, so doesn't need t
 PriorityQueue* upQueue;
 PriorityQueue* downQueue;
 PriorityQueue* current_queue = NULL;
-
-
-// With the default configuration, we accelerate over 2 seconds and decelerate over the same time. This means that whatever our top speed is 
-// (in m/s), we move exactly that amount of m with accelerating and decelerating combined. So if our top speed is 2m/s, than accelerating takes
-// 1m and decelerating takes 1m.
-// 
-// Lets assume that the stories are 4m apart floor-to-floor and that our elevators maximum speed is 2m/s (Note that we move only at 75%
-// of the top speed, which in this case would be 2.5m/s). To move one story up, we would need to signal to the move thread to move 1 second
-// between accelerating and decelerating. Or, in more general terms, whatever the distance between floors (y) or our speed, to move distance y,
-// we need to move (y-(speed/s))/(speed/s) seconds ((4-2)/2 = 1)
-const int story_height_cm = 400;
-const int elevator_speed_cms = 200;  // This refers to the maximum speed the elevator will move, which is 75% of the top speed.
 
 /*
  * Move thread will read this instruction to know what to do next. It is being written by the main thread.
@@ -154,7 +142,7 @@ void loop() {
   if (current_queue != NULL) {
     // Calculate the direction and the time the elevator needs to travel.
     int next_stop = extractNext(current_queue);
-    float time = calculateTime(story_height_cm, elevator_speed_cms, abs(next_stop - current_floor));
+    float time = calculateTime(STORY_HEIGHT_CM, ELEVATOR_SPEED_CMS, abs(next_stop - current_floor));
     Serial.printf("Current story: %d. Next stop: %d, will take %f seconds.\n", current_floor, next_stop, time);
     direction dir = next_stop > current_floor ? CLOCKWISE : COUNTERCLOCKWISE;
     next = {.dir = dir, time = time};
@@ -163,12 +151,12 @@ void loop() {
     pthread_create(&move_thread, NULL, move, NULL);
 
     // Check for all buttons and enqueue if one is pressed.
-    //checkButtons();
+    // checkButtons();
 
     // Wait for the thread to join and wait 2 seconds at the story.
     pthread_join(move_thread, NULL);
     current_floor = next_stop;
-    Serial.printf("Arrived at floor no. %d. Waiting...", current_floor);
+    Serial.printf("Arrived at floor no. %d. Waiting...\n", current_floor);
     sleep(2);
 
     // Check if current_queue is empty. If empty, set current_queue to NULL. Else, just repeat the loop.
@@ -180,6 +168,8 @@ void loop() {
   } else {
     Serial.println("No requests yet :(");
     sleep(1); // Wait a second before checking again.
+    // Check for all buttons and enqueue if one is pressed.
+    // checkButtons();
   }
 }
 

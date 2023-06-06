@@ -1,1 +1,0 @@
-#define NUMBER_OF_FLOORS 5
