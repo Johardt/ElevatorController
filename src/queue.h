@@ -1,15 +1,12 @@
+#include "common.h"
+
 typedef enum {
     ASCENDING = -1,
     DESCENDING = 1
 } sortingOrder;
 
-typedef struct node {
-    struct node* next;
-    int content;
-} QueueNode;
-
 typedef struct {
-    QueueNode* first;
+    int content[NUMBER_OF_FLOORS];
     int size;
     sortingOrder order;
 } PriorityQueue;

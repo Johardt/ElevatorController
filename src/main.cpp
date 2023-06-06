@@ -7,6 +7,7 @@
 #include <unistd.h>
 #include "lib.h"
 #include "queue.h"
+#include "common.h"
 
 // Pin definitions. The reference shows which GPIO have which number.
 // The colors refer to the color of the cable attached to the pin.
@@ -22,13 +23,13 @@ const int resolution = 8;
 
 pthread_t move_thread;
 pthread_t demo_thread;
-int current_story = 0; // Will only be written by move_thread, so doesn't need to be mutex'd.
+int current_floor = 0; // Will only be written by move_thread, so doesn't need to be mutex'd.
 
 // New requests will be put into either upQueue or downQueue, depending on the current location of the elevator.
 // The elevator will satisfy all requests of one queue until it is empty, then empty the next one. If both are empty,
 // the elevator will go into standby.
-PriorityQueue upQueue;
-PriorityQueue downQueue;
+PriorityQueue* upQueue;
+PriorityQueue* downQueue;
 PriorityQueue* current_queue = NULL;
 
 
@@ -42,7 +43,6 @@ PriorityQueue* current_queue = NULL;
 // we need to move (y-(speed/s))/(speed/s) seconds ((4-2)/2 = 1)
 const int story_height_cm = 400;
 const int elevator_speed_cms = 200;  // This refers to the maximum speed the elevator will move, which is 75% of the top speed.
-const int number_of_stories = 5;
 
 /*
  * Move thread will read this instruction to know what to do next. It is being written by the main thread.
@@ -74,8 +74,6 @@ void* move(void *args) {
   sleep(next.time);
   decelerate();
   digitalWrite(STBY, LOW);
-  current_story += (next.dir = CLOCKWISE) ? 1 : -1;
-  Serial.printf("Current story: %d\n", current_story);
   setDirection(NO_DIRECTION);
   return NULL;
 }
@@ -87,15 +85,17 @@ void *start_demo(void *number_of_loops) {
     srand(time(NULL));  
     int loops = (int) number_of_loops;
     Serial.printf("Demo thread started. Number of loops: %d\n", loops);
-    int next_story = rand() % number_of_stories;
+    int next_story = rand() % NUMBER_OF_FLOORS;
     for (int i = 0; i < loops; i++) {
-        sleep(5 + (rand() % 5)); // Sleep between 5 and 9 seconds
-        int next_story = rand() % number_of_stories;
-        if (next_story > current_story) {
-            insert(&upQueue, next_story);
-        } else if (next_story < current_story) {
-            insert(&downQueue, next_story);
-        }
+      int sleep_amount = 5 + (rand() % 5);
+      Serial.printf("Started iteration %d of %d. Will sleep %d seconds.\n", i, loops, sleep_amount);
+      sleep(sleep_amount); // Sleep between 5 and 9 seconds
+      int next_story = rand() % NUMBER_OF_FLOORS;
+      if (next_story > current_floor) {
+          insert(upQueue, next_story);
+      } else if (next_story < current_floor) {
+          insert(downQueue, next_story);
+      }
     }
     return NULL;
 }
@@ -106,7 +106,7 @@ void *start_demo(void *number_of_loops) {
 void setup() {
   //Wire.begin(); // Join I2C bus
   Serial.begin(9600);
-  Serial.print("Starting setup...\n");
+  Serial.println("Starting setup...");
   pinMode(2, OUTPUT);
   digitalWrite(2, HIGH);
 
@@ -124,6 +124,14 @@ void setup() {
   ledcWrite(pwmChannel, 0);
   digitalWrite(STBY, LOW);
   setDirection(NO_DIRECTION);
+
+  // Create the queues
+  upQueue = createPriorityQueue(ASCENDING);
+  downQueue = createPriorityQueue(DESCENDING);
+
+  // Start demo thread.
+  pthread_create(&demo_thread, NULL, start_demo, (void* ) 10);
+
   Serial.println("Finished setup!");
   digitalWrite(2, LOW);
 }
@@ -133,39 +141,45 @@ void setup() {
  */
 void loop() {
   Serial.println("Starting loop.");
-  // Start demo thread.
-  //pthread_create(&demo_thread, NULL, start_demo, (void* ) 10);
-  insert(&upQueue, 5);
-
   // Check if current_queue is NULL. If yes, check if one of the queues is not empty
   // Set the current_queue to the address of the non-empty queue. (upQueue Bias bc why not)
   if (current_queue == NULL) {
-    if (upQueue.size != 0) {
-      current_queue = &upQueue;
-    } else if (downQueue.size != 0) {
-      current_queue = &downQueue;
+    if (upQueue->size != 0) {
+      current_queue = upQueue;
+    } else if (downQueue->size != 0) {
+      current_queue = downQueue;
     }
   }
+  // If the current queue is not empty, execute the next instruction.
+  if (current_queue != NULL) {
+    // Calculate the direction and the time the elevator needs to travel.
+    int next_stop = extractNext(current_queue);
+    float time = calculateTime(story_height_cm, elevator_speed_cms, abs(next_stop - current_floor));
+    Serial.printf("Current story: %d. Next stop: %d, will take %f seconds.\n", current_floor, next_stop, time);
+    direction dir = next_stop > current_floor ? CLOCKWISE : COUNTERCLOCKWISE;
+    next = {.dir = dir, time = time};
 
-  // Calculate the direction and the time the elevator needs to travel.
-  int next_stop = extractNext(current_queue);
-  float time = calculateTime(story_height_cm, elevator_speed_cms, abs(next_stop - current_story));
-  direction dir = next_stop > current_story ? CLOCKWISE : COUNTERCLOCKWISE;
-  next = {.dir = dir, time = time};
+    //Start the next thread.
+    pthread_create(&move_thread, NULL, move, NULL);
 
-  //Start the next thread.
-  pthread_create(&move_thread, NULL, move, NULL);
+    // Check for all buttons and enqueue if one is pressed.
+    //checkButtons();
 
-  // Check for all buttons and enqueue if one is pressed.
-  //checkButtons();
+    // Wait for the thread to join and wait 2 seconds at the story.
+    pthread_join(move_thread, NULL);
+    current_floor = next_stop;
+    Serial.printf("Arrived at floor no. %d. Waiting...", current_floor);
+    sleep(2);
 
-  // Wait for the thread to join and wait 2 seconds at the story.
-  pthread_join(move_thread, NULL);
-  sleep(2);
-
-  // Check if current_queue is empty. If empty, set current_queue to NULL. Else, just repeat the loop.
-  if (current_queue->size == 0) {
-    current_queue = NULL;
+    // Check if current_queue is empty. If empty, set current_queue to NULL. Else, just repeat the loop.
+    Serial.println("Checking current queue");
+    if (current_queue->size == 0) {
+      Serial.println("Current queue is empty.");
+      current_queue = NULL;
+    }
+  } else {
+    Serial.println("No requests yet :(");
+    sleep(1); // Wait a second before checking again.
   }
 }
 
