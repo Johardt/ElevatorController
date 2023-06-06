@@ -3,6 +3,7 @@
 #include <pthread.h>
 #include <cmath>
 #include "lib.h"
+#include "queue.h"
 
 // Pin definitions. The reference shows which GPIO have which number.
 // The colors refer to the color of the cable attached to the pin.
@@ -33,14 +34,14 @@ const int elevator_speed_cms = 200;  // This refers to the maximum speed the ele
 /*
  * Move thread will read this instruction to know what to do next. It is being written by the main thread.
  */
-instruction next = {.dir = CLOCKWISE, .time = 1.0};
+Instruction next = {.dir = CLOCKWISE, .time = 1.0};
 
 // New requests will be put into either upQueue or downQueue, depending on the current location of the elevator.
 // The elevator will satisfy all requests of one queue until it is empty, then empty the next one. If both are empty,
 // the elevator will go into standby.
-priority_queue upQueue;
-priority_queue downQueue;
-priority_queue* current_queue = NULL;
+PriorityQueue upQueue;
+PriorityQueue downQueue;
+PriorityQueue* current_queue = NULL;
 
 /**
  * Accelerates from 0% to 75% in 2 seconds using the logistic curve function
@@ -99,30 +100,35 @@ void setup() {
  */
 void loop() {
   // Check if current_queue is NULL. If yes, check if one of the queues is not empty
-  // Set the current_queue to the address of the non-empty queue.
+  // Set the current_queue to the address of the non-empty queue. (upQueue Bias bc why not)
+  if (current_queue == NULL) {
+    if (upQueue.size != 0) {
+      current_queue = &upQueue;
+    } else if (downQueue.size != 0) {
+      current_queue = &downQueue;
+    }
+  }
 
-  // Start the next thread.
+  // Calculate the direction and the time the elevator needs to travel.
+  int next_stop = extractNext(current_queue);
+  float time = calculateTime(story_height_cm, elevator_speed_cms, abs(next_stop - current_story));
+  direction dir = next_stop > current_story ? CLOCKWISE : COUNTERCLOCKWISE;
+  next = {.dir = dir, time = time};
+
+  //Start the next thread.
+  pthread_create(&move_thread, NULL, move, NULL);
 
   // Check for all buttons and enqueue if one is pressed.
+  //checkButtons();
 
   // Wait for the thread to join and wait 2 seconds at the story.
+  pthread_join(move_thread, NULL);
+  sleep(2);
 
   // Check if current_queue is empty. If empty, set current_queue to NULL. Else, just repeat the loop.
-  next = {.dir = CLOCKWISE, .time = 1.0};
-  pthread_create(&move_thread, NULL, move, NULL);
-  Serial.println("Elevator moving up");
-
-  pthread_join(move_thread, NULL);
-  Serial.println("Elevator reached first floor, waiting...");
-  sleep(2);
-
-  next = {.dir = COUNTERCLOCKWISE, .time = 1.0};
-  pthread_create(&move_thread, NULL, move, NULL);
-  Serial.println("Elevator moving down");
-
-  pthread_join(move_thread, NULL);
-  Serial.println("Elevator reached ground floor, waiting...");
-  sleep(2);
+  if (current_queue->size == 0) {
+    current_queue = NULL;
+  }
 }
 
 void setDirection(direction dir) {
