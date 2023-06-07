@@ -8,5 +8,10 @@
 			"path": "../../Documents/PlatformIO/Projects/Threads"
 		}
 	],
-	"settings": {}
+	"settings": {
+		"files.associations": {
+			"random": "cpp",
+			"limits": "cpp"
+		}
+	}
 }

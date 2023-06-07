@@ -1,5 +1,5 @@
 #include <Arduino.h>
-//#include <Wire.h>
+#include <Wire.h>
 #include <pthread.h>
 #include <cmath>
 #include <time.h>
@@ -8,6 +8,7 @@
 #include "lib.h"
 #include "queue.h"
 #include "config.h"
+#include "i2c.h"
 
 // Pin definitions. The reference shows which GPIO have which number.
 // The colors refer to the color of the cable attached to the pin.
@@ -23,6 +24,11 @@ const int resolution = 8;
 
 pthread_t move_thread;
 pthread_t demo_thread;
+
+// pthread_t threadA;
+// pthread_t threadB;
+// pthread_t observer;
+
 int current_floor = 0; // Will only be written by main loop, so doesn't need to be mutex'd.
 
 // New requests will be put into either upQueue or downQueue, depending on the current location of the elevator.
@@ -52,16 +58,39 @@ void decelerate();
  */
 void setDirection(direction dir);
 
+// void* threadAFunc(void *args) {
+//   while (true) {
+//     writeOutputA(0b10000000);
+//     delay(10);
+//   }
+// }
+
+// void* threadBFunc(void *args) {
+//   while (true) {
+//     writeOutputA(0b01000000);
+//     delay(13);
+//   }
+// }
+
+// void* observerFunc(void *args) {
+//   int val = readInputB();
+//   Serial.printf("Got input %d from register B!", val);
+//   delay(10);
+//   return NULL;
+// }
+
 /**
  * Thread function to move. Accelerates to 75%, stays at that for specified amount of time, and decelerates again.
  */
 void* move(void *args) {
   setDirection(next.dir);
   digitalWrite(STBY, HIGH);
+  writeOutputA(0b10000000);
   accelerate();
-  sleep(next.time);
+  delay(next.time * 1000);
   decelerate();
   digitalWrite(STBY, LOW);
+  writeOutputA(0b00000000);
   setDirection(NO_DIRECTION);
   return NULL;
 }
@@ -70,19 +99,20 @@ void* move(void *args) {
  * Thread function for demo purposes. Can specify a number of loops, and will simulate random requests after random amount of time.
  */
 void *start_demo(void *number_of_loops) {
-    srand(time(NULL));  
+    // srand(time(NULL));  
     int loops = (int) number_of_loops;
     Serial.printf("Demo thread started. Number of loops: %d\n", loops);
-    int next_story = rand() % NUMBER_OF_FLOORS;
+    int next_floor = rand() % NUMBER_OF_FLOORS;
     for (int i = 0; i < loops; i++) {
-      int sleep_amount = 5 + (rand() % 5);
+      int sleep_amount = (rand() % 5);
       Serial.printf("Started iteration %d of %d. Will sleep %d seconds.\n", i, loops, sleep_amount);
-      sleep(sleep_amount); // Sleep between 5 and 9 seconds
-      int next_story = rand() % NUMBER_OF_FLOORS;
-      if (next_story > current_floor) {
-          insert(upQueue, next_story);
-      } else if (next_story < current_floor) {
-          insert(downQueue, next_story);
+      delay(sleep_amount * 1000); // Sleep between 5 and 9 seconds
+      int next_floor = rand() % NUMBER_OF_FLOORS;
+      Serial.printf("next floor: %d", next_floor);
+      if (next_floor > current_floor) {
+          insert(upQueue, next_floor);
+      } else if (next_floor < current_floor) {
+          insert(downQueue, next_floor);
       }
     }
     return NULL;
@@ -92,7 +122,7 @@ void *start_demo(void *number_of_loops) {
  * Standard Arduino function which contains the setup code.
  */
 void setup() {
-  //Wire.begin(); // Join I2C bus
+  setupI2Cpins();
   Serial.begin(9600);
   Serial.println("Starting setup...");
   pinMode(2, OUTPUT);
@@ -118,7 +148,11 @@ void setup() {
   downQueue = createPriorityQueue(DESCENDING);
 
   // Start demo thread.
-  pthread_create(&demo_thread, NULL, start_demo, (void* ) 10);
+  pthread_create(&demo_thread, NULL, start_demo, (void* ) 100);
+
+  // pthread_create(&threadA, NULL, threadAFunc, NULL);
+  // pthread_create(&threadB, NULL, threadBFunc, NULL);
+  // pthread_create(&observer, NULL, observerFunc, NULL);
 
   Serial.println("Finished setup!");
   digitalWrite(2, LOW);
@@ -128,7 +162,6 @@ void setup() {
  * Standard Arduino function which contains the logic of the program. It just continually loops whatever is inside, as the name suggests.
  */
 void loop() {
-  Serial.println("Starting loop.");
   // Check if current_queue is NULL. If yes, check if one of the queues is not empty
   // Set the current_queue to the address of the non-empty queue. (upQueue Bias bc why not)
   if (current_queue == NULL) {
@@ -157,7 +190,7 @@ void loop() {
     pthread_join(move_thread, NULL);
     current_floor = next_stop;
     Serial.printf("Arrived at floor no. %d. Waiting...\n", current_floor);
-    sleep(2);
+    delay(2000);
 
     // Check if current_queue is empty. If empty, set current_queue to NULL. Else, just repeat the loop.
     Serial.println("Checking current queue");
@@ -167,14 +200,14 @@ void loop() {
     }
   } else {
     Serial.println("No requests yet :(");
-    sleep(1); // Wait a second before checking again.
+    delay(1000); // Wait a second before checking again.
     // Check for all buttons and enqueue if one is pressed.
     // checkButtons();
   }
 }
 
 void setDirection(direction dir) {
-  digitalWrite(CTL1, (dir >> 1) & 1);
+  digitalWrite(CTL1, dir & 2);
   digitalWrite(CTL2, dir & 1);
 }
 
