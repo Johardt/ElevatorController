@@ -19,19 +19,21 @@ void insert(PriorityQueue* queue, int content) {
 }
 
 int extractNext(PriorityQueue* queue) {
+    queue->size -= 1;
+    if (queue->size < 0) {
+        queue->size = 0;
+    }
     if (queue->order == ASCENDING) {
         for (int i = 0; i < NUMBER_OF_FLOORS; i++) {
             if (queue->content[i] == 1) {
                 queue->content[i] = 0;
-                queue->size -= 1;
                 return i;
             }
         }
-    } else if (queue->order == DESCENDING) {
+    } else {
         for (int i = NUMBER_OF_FLOORS - 1; i >= 0; i--) {
             if (queue->content[i] == 1) {
                 queue->content[i] = 0;
-                queue->size -= 1;
                 return i;
             }
         }

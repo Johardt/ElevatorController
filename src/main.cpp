@@ -27,7 +27,7 @@ pthread_t demo_thread;
 
 // pthread_t threadA;
 // pthread_t threadB;
-// pthread_t observer;
+pthread_t observer;
 
 int current_floor = 0; // Will only be written by main loop, so doesn't need to be mutex'd.
 
@@ -72,12 +72,15 @@ void setDirection(direction dir);
 //   }
 // }
 
-// void* observerFunc(void *args) {
-//   int val = readInputB();
-//   Serial.printf("Got input %d from register B!", val);
-//   delay(10);
-//   return NULL;
-// }
+void* observerFunc(void *args) {
+  int val;
+  while(true) {
+    val = readInputB();
+    Serial.printf("Got input %d from register B!", val);
+    delay(10);
+  }
+  return NULL;
+}
 
 /**
  * Thread function to move. Accelerates to 75%, stays at that for specified amount of time, and decelerates again.
@@ -85,12 +88,12 @@ void setDirection(direction dir);
 void* move(void *args) {
   setDirection(next.dir);
   digitalWrite(STBY, HIGH);
-  writeOutputA(0b10000000);
+  // writeOutputA(0b10000000);
   accelerate();
   delay(next.time * 1000);
   decelerate();
   digitalWrite(STBY, LOW);
-  writeOutputA(0b00000000);
+  // writeOutputA(0b00000000);
   setDirection(NO_DIRECTION);
   return NULL;
 }
@@ -105,10 +108,9 @@ void *start_demo(void *number_of_loops) {
     int next_floor = rand() % NUMBER_OF_FLOORS;
     for (int i = 0; i < loops; i++) {
       int sleep_amount = (rand() % 5);
-      Serial.printf("Started iteration %d of %d. Will sleep %d seconds.\n", i, loops, sleep_amount);
-      delay(sleep_amount * 1000); // Sleep between 5 and 9 seconds
       int next_floor = rand() % NUMBER_OF_FLOORS;
-      Serial.printf("next floor: %d", next_floor);
+      Serial.printf("Started iteration %d of %d. Will sleep %d seconds. Next floor: %d\n", i, loops, sleep_amount, next_floor);
+      delay(sleep_amount * 1000); // Sleep between 5 and 9 seconds
       if (next_floor > current_floor) {
           insert(upQueue, next_floor);
       } else if (next_floor < current_floor) {
@@ -152,7 +154,7 @@ void setup() {
 
   // pthread_create(&threadA, NULL, threadAFunc, NULL);
   // pthread_create(&threadB, NULL, threadBFunc, NULL);
-  // pthread_create(&observer, NULL, observerFunc, NULL);
+  pthread_create(&observer, NULL, observerFunc, NULL);
 
   Serial.println("Finished setup!");
   digitalWrite(2, LOW);
@@ -175,23 +177,24 @@ void loop() {
   if (current_queue != NULL) {
     // Calculate the direction and the time the elevator needs to travel.
     int next_stop = extractNext(current_queue);
-    float time = calculateTime(STORY_HEIGHT_CM, ELEVATOR_SPEED_CMS, abs(next_stop - current_floor));
-    Serial.printf("Current story: %d. Next stop: %d, will take %f seconds.\n", current_floor, next_stop, time);
-    direction dir = next_stop > current_floor ? CLOCKWISE : COUNTERCLOCKWISE;
-    next = {.dir = dir, time = time};
+    if (next_stop != -100) {
+      float time = calculateTime(STORY_HEIGHT_CM, ELEVATOR_SPEED_CMS, abs(next_stop - current_floor));
+      Serial.printf("Current story: %d. Next stop: %d, will take %f seconds.\n", current_floor, next_stop, time);
+      direction dir = next_stop > current_floor ? CLOCKWISE : COUNTERCLOCKWISE;
+      next = {.dir = dir, time = time};
+      current_floor = next_stop;
 
-    //Start the next thread.
-    pthread_create(&move_thread, NULL, move, NULL);
+      //Start the next thread.
+      pthread_create(&move_thread, NULL, move, NULL);
 
-    // Check for all buttons and enqueue if one is pressed.
-    // checkButtons();
+      // Check for all buttons and enqueue if one is pressed.
+      // checkButtons();
 
-    // Wait for the thread to join and wait 2 seconds at the story.
-    pthread_join(move_thread, NULL);
-    current_floor = next_stop;
-    Serial.printf("Arrived at floor no. %d. Waiting...\n", current_floor);
-    delay(2000);
-
+      // Wait for the thread to join and wait 2 seconds at the story.
+      pthread_join(move_thread, NULL);
+      Serial.printf("Arrived at floor no. %d. Waiting...\n", current_floor);
+      delay(2000);
+    }
     // Check if current_queue is empty. If empty, set current_queue to NULL. Else, just repeat the loop.
     Serial.println("Checking current queue");
     if (current_queue->size == 0) {
